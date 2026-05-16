@@ -522,21 +522,52 @@ class PlaywrightProvider(BrowserProvider):
         if not self._page:
             return ActionResult(success=False, message="Browser not launched")
 
-        MAX_RETRIES = 3
+        MAX_RETRIES = 2
         for attempt in range(MAX_RETRIES):
             try:
+                # Check page is still alive
+                try:
+                    _ = self._page.url
+                except Exception:
+                    return ActionResult(success=False, message="Page is closed, cannot select date")
+
                 # First click the date field to open the calendar
                 el = self._page.locator(f'[data-mano-ref="{ref}"]')
                 if await el.count() > 0:
-                    await el.click(timeout=3000)
-                    await asyncio.sleep(1.0)
+                    try:
+                        await el.click(timeout=5000)
+                        await asyncio.sleep(1.5)
+                    except Exception as click_err:
+                        logger.warning(f"Click on date field {ref} failed: {click_err}")
+                        # Try JS click as fallback
+                        try:
+                            await el.evaluate('el => el.click()', timeout=3000)
+                            await asyncio.sleep(1.0)
+                        except Exception:
+                            pass
+                else:
+                    logger.warning(f"Date field {ref} not found, trying generic date selectors")
+                    # Try common date field selectors
+                    for selector in ['input[type="date"]', '[placeholder*="date" i]', '[placeholder*="depart" i]', '[aria-label*="date" i]', '[aria-label*="departure" i]']:
+                        date_el = self._page.locator(selector).first
+                        if await date_el.count() > 0:
+                            await date_el.click(timeout=3000)
+                            await asyncio.sleep(1.0)
+                            break
+
+                # Check for new popup pages
+                if self._context:
+                    pages = self._context.pages
+                    if len(pages) > 1:
+                        # Switch to newest page
+                        self._page = pages[-1]
+                        logger.info(f"Switched to new popup page: {self._page.url}")
 
                 # Parse the date
                 target_date = None
                 try:
                     target_date = datetime.strptime(date_str, "%Y-%m-%d")
                 except ValueError:
-                    # Try other formats
                     for fmt in ["%m/%d/%Y", "%B %d, %Y", "%b %d, %Y", "%d/%m/%Y"]:
                         try:
                             target_date = datetime.strptime(date_str, fmt)
@@ -545,9 +576,11 @@ class PlaywrightProvider(BrowserProvider):
                             continue
 
                 if not target_date:
-                    # If can't parse, just try to type it and press Enter
                     if await el.count() > 0:
-                        await el.type(date_str, delay=50, timeout=3000)
+                        try:
+                            await el.type(date_str, delay=50, timeout=3000)
+                        except Exception:
+                            await self._page.keyboard.type(date_str, delay=50)
                     else:
                         await self._page.keyboard.type(date_str, delay=50)
                     await asyncio.sleep(0.5)
@@ -558,14 +591,26 @@ class PlaywrightProvider(BrowserProvider):
                 iso_str = target_date.strftime("%Y-%m-%d")
 
                 # Strategy 1: data-iso attribute
-                date_cell = self._page.locator(f'[data-iso="{iso_str}"]')
-                if await date_cell.count() > 0:
-                    await date_cell.first.click(timeout=3000)
-                    await asyncio.sleep(0.5)
-                    return ActionResult(success=True, message=f"Selected date {iso_str} via data-iso")
+                try:
+                    date_cell = self._page.locator(f'[data-iso="{iso_str}"]')
+                    if await date_cell.count() > 0:
+                        try:
+                            await date_cell.first.click(timeout=3000)
+                        except Exception:
+                            # Element overlapped — use force click
+                            await date_cell.first.click(force=True, timeout=3000)
+                        await asyncio.sleep(0.5)
+                        return ActionResult(success=True, message=f"Selected date {iso_str} via data-iso")
+                except Exception as e:
+                    # Last resort: JS click for shadow DOM / overlapped elements
+                    try:
+                        await self._page.evaluate(f"""document.querySelector('[data-iso="{iso_str}"]')?.click()""")
+                        await asyncio.sleep(0.5)
+                        return ActionResult(success=True, message=f"Selected date {iso_str} via data-iso (JS click)")
+                    except Exception:
+                        logger.warning(f"Strategy 1 (data-iso) failed: {e}")
 
                 # Strategy 2: aria-label containing the date
-                # Google Flights uses format: "Friday, June 20, 2026"
                 month_names = ["January", "February", "March", "April", "May", "June",
                               "July", "August", "September", "October", "November", "December"]
                 day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -575,7 +620,6 @@ class PlaywrightProvider(BrowserProvider):
                 day_num = target_date.day
                 year = target_date.year
 
-                # Try multiple aria-label formats
                 aria_patterns = [
                     f"{day_name}, {month_name} {day_num}, {year}",
                     f"{month_name} {day_num}, {year}",
@@ -583,49 +627,82 @@ class PlaywrightProvider(BrowserProvider):
                     f"{day_num} {month_name} {year}",
                 ]
 
-                for pattern in aria_patterns:
-                    cell = self._page.locator(f'[aria-label*="{pattern}"]')
-                    if await cell.count() > 0:
-                        await cell.first.click(timeout=3000)
-                        await asyncio.sleep(0.5)
-                        return ActionResult(success=True, message=f"Selected date via aria-label: {pattern}")
-
-                # Strategy 3: Navigate months if needed, then try again
-                # Check if we need to go forward in the calendar
-                for _ in range(6):  # Try up to 6 months forward
-                    next_btn = self._page.locator('[aria-label*="Next" i], [aria-label*="next month" i], button:has-text("\u203a"), button:has-text(">")')
-                    if await next_btn.count() > 0:
-                        await next_btn.first.click(timeout=2000)
-                        await asyncio.sleep(0.5)
-
-                        # Check again for the date
-                        for pattern in aria_patterns:
-                            cell = self._page.locator(f'[aria-label*="{pattern}"]')
-                            if await cell.count() > 0:
+                try:
+                    for pattern in aria_patterns:
+                        cell = self._page.locator(f'[aria-label*="{pattern}"]')
+                        if await cell.count() > 0:
+                            try:
                                 await cell.first.click(timeout=3000)
+                            except Exception:
+                                await cell.first.click(force=True, timeout=3000)
+                            await asyncio.sleep(0.5)
+                            return ActionResult(success=True, message=f"Selected date via aria-label: {pattern}")
+                except Exception as e:
+                    # JS fallback for aria-label
+                    try:
+                        for pattern in aria_patterns:
+                            result = await self._page.evaluate(f"""(() => {{ const el = document.querySelector('[aria-label*="{pattern}"]'); if (el) {{ el.click(); return true; }} return false; }})()""")
+                            if result:
                                 await asyncio.sleep(0.5)
-                                return ActionResult(success=True, message=f"Selected date after navigating: {pattern}")
-                    else:
-                        break
+                                return ActionResult(success=True, message=f"Selected date via aria-label (JS): {pattern}")
+                    except Exception:
+                        pass
+                    logger.warning(f"Strategy 2 (aria-label) failed: {e}")
 
-                # Strategy 4: Try keyboard input — clear and type the date
-                await self._page.keyboard.press("Escape")
-                await asyncio.sleep(0.3)
-                if await el.count() > 0:
-                    await el.click(timeout=2000)
+                # Strategy 3: Navigate months if needed
+                try:
+                    for _ in range(6):
+                        next_btn = self._page.locator('[aria-label*="Next" i], [aria-label*="next month" i], button:has-text("\u203a"), button:has-text(">")')
+                        if await next_btn.count() > 0:
+                            try:
+                                await next_btn.first.click(timeout=2000)
+                            except Exception:
+                                await next_btn.first.click(force=True, timeout=2000)
+                            await asyncio.sleep(0.5)
+
+                            for pattern in aria_patterns:
+                                cell = self._page.locator(f'[aria-label*="{pattern}"]')
+                                if await cell.count() > 0:
+                                    try:
+                                        await cell.first.click(timeout=3000)
+                                    except Exception:
+                                        await cell.first.click(force=True, timeout=3000)
+                                    await asyncio.sleep(0.5)
+                                    return ActionResult(success=True, message=f"Selected date after navigating: {pattern}")
+                        else:
+                            break
+                except Exception as e:
+                    logger.warning(f"Strategy 3 (navigate months) failed: {e}")
+
+                # Strategy 4: Try keyboard input
+                try:
+                    await self._page.keyboard.press("Escape")
                     await asyncio.sleep(0.3)
-                await self._page.keyboard.press("Control+a")
-                await self._page.keyboard.type(target_date.strftime("%b %d"), delay=50)
-                await asyncio.sleep(0.5)
-                await self._page.keyboard.press("Enter")
-                await asyncio.sleep(0.5)
-                return ActionResult(success=True, message=f"Typed date {date_str} via keyboard")
+                    if await el.count() > 0:
+                        try:
+                            await el.click(timeout=2000)
+                        except Exception:
+                            pass
+                        await asyncio.sleep(0.3)
+                    await self._page.keyboard.press("Control+a")
+                    await self._page.keyboard.type(target_date.strftime("%b %d"), delay=50)
+                    await asyncio.sleep(0.5)
+                    await self._page.keyboard.press("Enter")
+                    await asyncio.sleep(0.5)
+                    return ActionResult(success=True, message=f"Typed date {date_str} via keyboard")
+                except Exception as e:
+                    logger.warning(f"Strategy 4 (keyboard) failed: {e}")
+
+                return ActionResult(success=False, message=f"Could not find date {iso_str} in calendar")
 
             except Exception as e:
+                err_msg = str(e)
+                if "closed" in err_msg.lower():
+                    return ActionResult(success=False, message=f"Browser page closed during select_date: {err_msg[:80]}")
                 if attempt < MAX_RETRIES - 1:
                     await asyncio.sleep(1)
                     continue
-                return ActionResult(success=False, message=f"select_date failed: {str(e)[:100]}")
+                return ActionResult(success=False, message=f"select_date failed: {err_msg[:100]}")
 
     # ------------------------------------------------------------------
     # Select

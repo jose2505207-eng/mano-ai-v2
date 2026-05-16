@@ -108,8 +108,9 @@ def validate_action(
 
     # ------------------------------------------------------------------
     # 1. Element ref must exist in the snapshot
+    # (skip for select_date — the method handles stale refs with fallback selectors)
     # ------------------------------------------------------------------
-    if decision.ref and snapshot:
+    if decision.ref and snapshot and decision.kind != "select_date":
         refs = {el.ref for el in snapshot.elements}
         if decision.ref not in refs:
             sample_refs = sorted(refs)[:10]
