@@ -1,0 +1,10 @@
+{
+  "full_name": null,
+  "email": null,
+  "phone": null,
+  "date_of_birth": null,
+  "address": null,
+  "preferred_language": "en",
+  "preferred_airport": null,
+  "payment_allowed": false
+}

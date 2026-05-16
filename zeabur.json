@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.zeabur.app/template.json",
+  "apiVersion": 1,
+  "build": {
+    "type": "dockerfile",
+    "dockerfile": "Dockerfile"
+  },
+  "env": {
+    "PORT": "8000"
+  },
+  "healthCheck": {
+    "path": "/api/health",
+    "interval": 30,
+    "timeout": 10
+  },
+  "expose": {
+    "port": 8000
+  }
+}
