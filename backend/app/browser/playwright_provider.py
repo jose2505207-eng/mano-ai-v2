@@ -512,6 +512,122 @@ class PlaywrightProvider(BrowserProvider):
             )
 
     # ------------------------------------------------------------------
+    # Select Date (calendar widget)
+    # ------------------------------------------------------------------
+
+    async def select_date(self, ref: str, date_str: str) -> ActionResult:
+        """Select a date from a calendar widget. date_str format: YYYY-MM-DD or natural language."""
+        from datetime import datetime
+
+        if not self._page:
+            return ActionResult(success=False, message="Browser not launched")
+
+        MAX_RETRIES = 3
+        for attempt in range(MAX_RETRIES):
+            try:
+                # First click the date field to open the calendar
+                el = self._page.locator(f'[data-mano-ref="{ref}"]')
+                if await el.count() > 0:
+                    await el.click(timeout=3000)
+                    await asyncio.sleep(1.0)
+
+                # Parse the date
+                target_date = None
+                try:
+                    target_date = datetime.strptime(date_str, "%Y-%m-%d")
+                except ValueError:
+                    # Try other formats
+                    for fmt in ["%m/%d/%Y", "%B %d, %Y", "%b %d, %Y", "%d/%m/%Y"]:
+                        try:
+                            target_date = datetime.strptime(date_str, fmt)
+                            break
+                        except ValueError:
+                            continue
+
+                if not target_date:
+                    # If can't parse, just try to type it and press Enter
+                    if await el.count() > 0:
+                        await el.type(date_str, delay=50, timeout=3000)
+                    else:
+                        await self._page.keyboard.type(date_str, delay=50)
+                    await asyncio.sleep(0.5)
+                    await self._page.keyboard.press("Enter")
+                    return ActionResult(success=True, message=f"Typed date '{date_str}' and pressed Enter")
+
+                # Try to find and click the date cell by aria-label or data-iso
+                iso_str = target_date.strftime("%Y-%m-%d")
+
+                # Strategy 1: data-iso attribute
+                date_cell = self._page.locator(f'[data-iso="{iso_str}"]')
+                if await date_cell.count() > 0:
+                    await date_cell.first.click(timeout=3000)
+                    await asyncio.sleep(0.5)
+                    return ActionResult(success=True, message=f"Selected date {iso_str} via data-iso")
+
+                # Strategy 2: aria-label containing the date
+                # Google Flights uses format: "Friday, June 20, 2026"
+                month_names = ["January", "February", "March", "April", "May", "June",
+                              "July", "August", "September", "October", "November", "December"]
+                day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+                day_name = day_names[target_date.weekday()]
+                month_name = month_names[target_date.month - 1]
+                day_num = target_date.day
+                year = target_date.year
+
+                # Try multiple aria-label formats
+                aria_patterns = [
+                    f"{day_name}, {month_name} {day_num}, {year}",
+                    f"{month_name} {day_num}, {year}",
+                    f"{month_name} {day_num}",
+                    f"{day_num} {month_name} {year}",
+                ]
+
+                for pattern in aria_patterns:
+                    cell = self._page.locator(f'[aria-label*="{pattern}"]')
+                    if await cell.count() > 0:
+                        await cell.first.click(timeout=3000)
+                        await asyncio.sleep(0.5)
+                        return ActionResult(success=True, message=f"Selected date via aria-label: {pattern}")
+
+                # Strategy 3: Navigate months if needed, then try again
+                # Check if we need to go forward in the calendar
+                for _ in range(6):  # Try up to 6 months forward
+                    next_btn = self._page.locator('[aria-label*="Next" i], [aria-label*="next month" i], button:has-text("\u203a"), button:has-text(">")')
+                    if await next_btn.count() > 0:
+                        await next_btn.first.click(timeout=2000)
+                        await asyncio.sleep(0.5)
+
+                        # Check again for the date
+                        for pattern in aria_patterns:
+                            cell = self._page.locator(f'[aria-label*="{pattern}"]')
+                            if await cell.count() > 0:
+                                await cell.first.click(timeout=3000)
+                                await asyncio.sleep(0.5)
+                                return ActionResult(success=True, message=f"Selected date after navigating: {pattern}")
+                    else:
+                        break
+
+                # Strategy 4: Try keyboard input — clear and type the date
+                await self._page.keyboard.press("Escape")
+                await asyncio.sleep(0.3)
+                if await el.count() > 0:
+                    await el.click(timeout=2000)
+                    await asyncio.sleep(0.3)
+                await self._page.keyboard.press("Control+a")
+                await self._page.keyboard.type(target_date.strftime("%b %d"), delay=50)
+                await asyncio.sleep(0.5)
+                await self._page.keyboard.press("Enter")
+                await asyncio.sleep(0.5)
+                return ActionResult(success=True, message=f"Typed date {date_str} via keyboard")
+
+            except Exception as e:
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(1)
+                    continue
+                return ActionResult(success=False, message=f"select_date failed: {str(e)[:100]}")
+
+    # ------------------------------------------------------------------
     # Select
     # ------------------------------------------------------------------
 
@@ -706,6 +822,8 @@ class PlaywrightProvider(BrowserProvider):
                     return await self.fill(decision.ref or "", decision.value or "")
                 case "select":
                     return await self.select(decision.ref or "", decision.value or "")
+                case "select_date":
+                    return await self.select_date(decision.ref or "", decision.value or "")
                 case "scroll":
                     return await self.scroll(decision.value or "down")
                 case "wait":

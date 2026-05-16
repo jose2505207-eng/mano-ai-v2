@@ -399,8 +399,15 @@ class Orchestrator:
             ref_tag = f"ref={el.ref}"
             value_info = f' value="{el.value}"' if el.value else ""
             type_info = f" type={el.input_type}" if el.input_type else ""
+            # Tag date-related fields so LLM knows to use select_date
+            date_hint = ""
+            text_lower = text_info.lower()
+            if el.role in ("GRIDCELL",) or el.input_type == "date":
+                date_hint = " [DATE-FIELD: use select_date]"
+            elif any(kw in text_lower for kw in ["date", "departure", "return", "check-in", "check-out", "depart", "calendar", "fecha"]):
+                date_hint = " [DATE-FIELD: use select_date]"
             parts.append(
-                f"  {ref_tag} {role_tag} {text_info}{type_info}{value_info}"
+                f"  {ref_tag} {role_tag} {text_info}{type_info}{value_info}{date_hint}"
             )
 
         parts.append("")
@@ -460,6 +467,9 @@ class Orchestrator:
             "goto": "navigate",
             "go": "navigate",
             "open": "navigate",
+            "date": "select_date",
+            "pick_date": "select_date",
+            "calendar": "select_date",
         }
         if isinstance(data.get("kind"), str):
             fixed = kind_fixes.get(data["kind"].lower())

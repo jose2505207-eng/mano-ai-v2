@@ -53,6 +53,7 @@ class ActionDecision(BaseModel):
         "click",
         "fill",
         "select",
+        "select_date",
         "scroll",
         "wait",
         "extract",

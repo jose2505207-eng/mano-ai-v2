@@ -2,6 +2,14 @@
 
 **The internet, guided step by step.**
 
+## 🚀 Live Demo
+
+**Deployed on Zeabur:** [https://mano-ai.zeabur.app](https://mano-ai.zeabur.app)
+
+[![Deployed on Zeabur](https://img.shields.io/badge/Deployed%20on-Zeabur-7B61FF?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTUgNEg1TDEwIDEwTDUgMTZIMTVMMTAgMTBMMTUgNFoiIGZpbGw9IndoaXRlIi8+PC9zdmc+)](https://mano-ai.zeabur.app)
+
+---
+
 Mano AI is a real, general-purpose browser-using AI web agent. You give it a task in plain language — "Book the cheapest flight from Miami to Bogotá next Friday" — and it searches the web, opens real websites, reads pages, clicks buttons, fills forms, and stops before anything sensitive or irreversible.
 
 This is not a fake demo. This is not a hardcoded workflow. Mano AI is a real web operator that perceives, decides, and acts — with safety built in from the ground up.

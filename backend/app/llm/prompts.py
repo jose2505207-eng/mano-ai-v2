@@ -22,6 +22,7 @@ ELEMENT TYPES IN THE SNAPSHOT:
 - [OPTION] / [TAB] — list items or tabs.
 - [MENUITEM] — menu items; click to select.
 - [LISTBOX] — list containers with options inside.
+- [GRIDCELL] — calendar date cells. Use kind="select_date" with value as YYYY-MM-DD. Do NOT use fill() on these.
 
 SPA BEHAVIOR (CRITICAL for Google Flights, Airbnb, etc.):
 - After filling a field with autocomplete, the page DOM CHANGES completely. Old refs become INVALID.
@@ -30,6 +31,7 @@ SPA BEHAVIOR (CRITICAL for Google Flights, Airbnb, etc.):
 - After filling one field, the NEXT field will have a DIFFERENT ref number. Do NOT reuse the previous step's ref.
 - To submit a search form, click the search/submit [BUTTON]. Do NOT use kind="search" — it does not exist.
 - SEARCH SUBMISSION: After filling origin, destination, and date fields on a travel site, try pressing Enter (kind="press_key" value="Enter") to submit. If that doesn't work, look for a button with text "Search" or "Explore" and click it.
+- DATE PICKERS: For ANY field that asks for a date (departure date, return date, check-in, check-out, etc.), ALWAYS use kind="select_date" with ref pointing to the date input/field and value as the date in YYYY-MM-DD format. Do NOT try to fill() a date field — fill() cannot interact with calendar widgets. The select_date action will click the date field, open the calendar, and find the correct date cell by aria-label or data-iso attribute. This applies to Google Flights, Airbnb, Expedia, Booking.com, and any site with calendar date pickers.
 
 NAVIGATION RULE (CRITICAL):
 - NEVER navigate to a URL you are already on.
@@ -47,9 +49,12 @@ AUTOCOMPLETE RULE (CRITICAL):
 - Do NOT click the same field again. Do NOT re-fill it.
 
 CALENDAR DATE RULE (CRITICAL):
-- ONLY click calendar cells whose text label contains the year (e.g. "Thursday, June 20, 2026, from $454").
-- NEVER click elements that only show a bare number like "20" — those are likely navigation arrows or unrelated elements.
-- Click the date input once to open the calendar, then click the correct cell.
+- For date fields, ALWAYS use kind="select_date" with value in YYYY-MM-DD format (e.g. "2026-06-20").
+- The ref should point to the date input field element.
+- NEVER use fill() on date picker widgets — fill() types text which calendar widgets reject.
+- The select_date action will automatically open the calendar, navigate to the correct month, and click the right date cell.
+- If you see a field that accepts a date (departure, return, check-in, check-out, date of travel), use select_date, NOT fill.
+- ONLY use fill() for text inputs like city names, names, emails. Dates ALWAYS get select_date.
 
 SAFETY (never do automatically):
 - Payment, final purchase, final booking, legal/government/medical form submission, passwords, identity verification, SSN, passport, driver license, account deletion.
@@ -65,7 +70,7 @@ COMPLETION RULES:
 
 Return a single JSON object:
 {
-  "kind": "navigate|search_web|click|fill|select|scroll|wait|extract|press_key|ask_user|request_approval|done|stuck",
+  "kind": "navigate|search_web|click|fill|select|select_date|scroll|wait|extract|press_key|ask_user|request_approval|done|stuck",
   "ref": "element ref if applicable",
   "value": "value to fill, URL to navigate, or key name (Enter, Escape, Tab, ArrowDown, ArrowUp)",
   "url": "URL for navigate action",
