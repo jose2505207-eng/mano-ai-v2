@@ -132,6 +132,17 @@ OBSERVE_JS = """
         });
     });
 
+    // Priority boost for search/submit/explore buttons
+    elements.forEach(item => {
+        const text = (item.text || '').toLowerCase();
+        const inputType = item.input_type || '';
+        if (text === 'search' || text === 'explore' || text === 'buscar' ||
+            text.includes('search') || text.includes('explore') ||
+            inputType === 'submit') {
+            item._sortPriority = -1;  // Highest priority — sorts before everything
+        }
+    });
+
     // Rule 2: Sort by viewport priority first, then by vertical position
     elements.sort((a, b) => {
         if (a._sortPriority !== b._sortPriority) return a._sortPriority - b._sortPriority;
@@ -266,6 +277,23 @@ class PlaywrightProvider(BrowserProvider):
                 if attempt < max_retries:
                     wait_time = min(1.0, max(0.0, 5.0 - (time.monotonic() - start_time)))
                     await asyncio.sleep(wait_time)
+
+        # If ref-based click failed, try by button text/selector
+        try:
+            for selector in [
+                'button[aria-label*="Search" i]',
+                'button[aria-label*="Explore" i]',
+                'button:has-text("Search")',
+                'button:has-text("Explore")',
+                '[role="button"][aria-label*="Search" i]',
+                '[role="button"][aria-label*="Explore" i]',
+            ]:
+                btn = self._page.locator(selector).first
+                if await btn.count() > 0:
+                    await btn.click(timeout=3000)
+                    return ActionResult(success=True, message=f"Clicked search button via selector: {selector}")
+        except Exception:
+            pass
 
         return ActionResult(
             success=False,
@@ -539,6 +567,25 @@ class PlaywrightProvider(BrowserProvider):
             return ActionResult(success=False, message=f"Wait failed: {e}")
 
     # ------------------------------------------------------------------
+    # Press Key
+    # ------------------------------------------------------------------
+
+    async def press_key(self, key: str = "Enter") -> ActionResult:
+        """Press a keyboard key (e.g. Enter, Tab, Escape, ArrowDown)."""
+        try:
+            if not self._page:
+                return ActionResult(success=False, message="Browser not launched")
+            await self._page.keyboard.press(key)
+            await asyncio.sleep(0.3)
+            return ActionResult(
+                success=True,
+                message=f"Pressed key: {key}",
+            )
+        except Exception as e:
+            logger.error(f"Press key error: {e}")
+            return ActionResult(success=False, message=f"Press key failed: {e}")
+
+    # ------------------------------------------------------------------
     # Extract (Rule 3)
     # ------------------------------------------------------------------
 
@@ -670,6 +717,8 @@ class PlaywrightProvider(BrowserProvider):
                     query = urllib.parse.quote_plus(decision.value or "")
                     url = f"https://www.google.com/search?q={query}"
                     return await self.navigate(url)
+                case "press_key":
+                    return await self.press_key(decision.value or "Enter")
                 case _:
                     return ActionResult(
                         success=False,

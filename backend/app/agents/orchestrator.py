@@ -326,21 +326,47 @@ class Orchestrator:
     # ------------------------------------------------------------------
 
     def _is_in_loop(self, decision: ActionDecision) -> bool:
-        """Detect if the same action (kind + ref) has been repeated 3+ times."""
+        """Detect if the agent is stuck in a loop.
+
+        Checks for:
+        1. Same exact action repeated 2+ times consecutively
+        2. Alternating between 2 actions 4+ times (A, B, A, B pattern)
+        """
         if not self.task_run or not self.task_run.steps:
             return False
 
         action_key = f"{decision.kind}:{decision.ref or ''}:{decision.value or ''}"
-        consecutive_count = 0
 
+        # Check 1: Consecutive identical actions (2+ times)
+        consecutive_count = 0
         for step in reversed(self.task_run.steps):
             step_key = f"{step.decision.kind}:{step.decision.ref or ''}:{step.decision.value or ''}"
             if step_key == action_key:
                 consecutive_count += 1
             else:
                 break
+        if consecutive_count >= 2:
+            return True
 
-        return consecutive_count >= 2
+        # Check 2: Alternating pattern — same 2 actions repeating 4+ times
+        if len(self.task_run.steps) >= 4:
+            recent_keys = [
+                f"{s.decision.kind}:{s.decision.ref or ''}:{s.decision.value or ''}"
+                for s in self.task_run.steps[-6:]
+            ]
+            # Check if we're alternating between 2 unique actions
+            unique_keys = set(recent_keys)
+            if len(unique_keys) == 2 and len(recent_keys) >= 4:
+                # Verify it's truly alternating (A, B, A, B or B, A, B, A)
+                is_alternating = True
+                for i in range(len(recent_keys) - 1):
+                    if recent_keys[i] == recent_keys[i + 1]:
+                        is_alternating = False
+                        break
+                if is_alternating:
+                    return True
+
+        return False
 
     # ------------------------------------------------------------------
     # Context building
@@ -430,7 +456,7 @@ class Orchestrator:
             "search": "click",          # LLM often says "search" instead of clicking search btn
             "submit": "click",
             "type": "fill",
-            "enter": "fill",
+            "enter": "press_key",
             "goto": "navigate",
             "go": "navigate",
             "open": "navigate",

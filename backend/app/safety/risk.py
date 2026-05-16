@@ -185,6 +185,15 @@ def is_payment_action(
     return any(kw in combined for kw in PAYMENT_KEYWORDS)
 
 
+# Search engine domains where form submission is always safe (no approval needed)
+SEARCH_ENGINE_DOMAINS = [
+    "google.com/flights", "google.com/travel",
+    "kayak.com", "skyscanner.com", "expedia.com",
+    "booking.com", "airbnb.com", "tripadvisor.com",
+    "google.com/search", "bing.com", "duckduckgo.com",
+]
+
+
 def is_submit_action(
     decision: ActionDecision,
     snapshot: BrowserSnapshot | None = None,
@@ -192,8 +201,15 @@ def is_submit_action(
     """Return *True* if an action is a form submission.
 
     Checks the decision's ``reason`` and the text of the referenced element
-    for submit-related keywords.
+    for submit-related keywords.  Exempts search engine pages where clicking
+    a search/submit button is always safe.
     """
+    # Exemption: on search engines, clicking submit/search is always safe
+    if snapshot and snapshot.url:
+        page_url = snapshot.url.lower()
+        if any(domain in page_url for domain in SEARCH_ENGINE_DOMAINS):
+            return False
+
     texts = [(decision.reason or "").lower()]
     if snapshot and decision.ref:
         element = _find_element(snapshot, decision.ref)

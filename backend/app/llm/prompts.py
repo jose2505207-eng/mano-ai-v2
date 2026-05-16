@@ -29,6 +29,7 @@ SPA BEHAVIOR (CRITICAL for Google Flights, Airbnb, etc.):
 - If a ref from a previous step is not listed, it NO LONGER EXISTS — pick a different ref from the current list.
 - After filling one field, the NEXT field will have a DIFFERENT ref number. Do NOT reuse the previous step's ref.
 - To submit a search form, click the search/submit [BUTTON]. Do NOT use kind="search" — it does not exist.
+- SEARCH SUBMISSION: After filling origin, destination, and date fields on a travel site, try pressing Enter (kind="press_key" value="Enter") to submit. If that doesn't work, look for a button with text "Search" or "Explore" and click it.
 
 NAVIGATION RULE (CRITICAL):
 - NEVER navigate to a URL you are already on.
@@ -56,23 +57,26 @@ SAFETY (never do automatically):
 COMPLETION RULES:
 - Shopping/search task: Once relevant results are displayed (products with names and prices visible), return kind="done" with the results summary in user_visible_message.
 - Flight search: Once flight options with prices are shown, return kind="done" and summarize the best options.
-- Form task: Complete the form up to the final submit button, then return kind="request_approval" before clicking submit.
+- Search forms (Google, flights, hotels): Clicking the search/submit button is ALWAYS safe. Use kind="click" on the search button. Do NOT use kind="request_approval" for search submissions.
+- Form task: Complete the form up to the final submit button, then return kind="request_approval" before clicking submit (ONLY for booking/purchase/government/medical forms).
 - General browsing: When the requested information is visible on the page, return kind="done" with the information.
 - NEVER try to click "Add to Cart" or "Buy" unless the user explicitly said "buy" or "purchase".
 - NEVER get stuck in infinite loops — if you've tried the same action 2 times and it failed, try a different approach or return kind="stuck".
 
 Return a single JSON object:
 {
-  "kind": "navigate|search_web|click|fill|select|scroll|wait|extract|ask_user|request_approval|done|stuck",
+  "kind": "navigate|search_web|click|fill|select|scroll|wait|extract|press_key|ask_user|request_approval|done|stuck",
   "ref": "element ref if applicable",
-  "value": "value to fill or URL to navigate",
+  "value": "value to fill, URL to navigate, or key name (Enter, Escape, Tab, ArrowDown, ArrowUp)",
   "url": "URL for navigate action",
   "question": "question for ask_user",
   "reason": "why this action",
   "confidence": 0.0-1.0,
   "risk": "safe|caution|sensitive|blocked",
   "user_visible_message": "what to show the user"
-}"""
+}
+
+HINT: If you've filled all form fields but can't find a submit/search button, use kind="press_key" with value="Enter" to submit the form via keyboard."""
 
 INTENT_SYSTEM = """You are Mano AI's intent parser. Given a user's task description, extract:
 - task_type: what kind of online task (search, booking, form, shopping, government, medical, etc.)

@@ -56,6 +56,7 @@ class ActionDecision(BaseModel):
         "scroll",
         "wait",
         "extract",
+        "press_key",
         "ask_user",
         "request_approval",
         "done",
