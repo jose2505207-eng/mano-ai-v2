@@ -285,8 +285,12 @@ class PlaywrightProvider(BrowserProvider):
                 'button[aria-label*="Explore" i]',
                 'button:has-text("Search")',
                 'button:has-text("Explore")',
+                'button:has-text("Buscar")',
                 '[role="button"][aria-label*="Search" i]',
                 '[role="button"][aria-label*="Explore" i]',
+                '[role="button"]:has-text("Search")',
+                '[role="button"]:has-text("Explore")',
+                'button[jsname]',  # Google-specific
             ]:
                 btn = self._page.locator(selector).first
                 if await btn.count() > 0:

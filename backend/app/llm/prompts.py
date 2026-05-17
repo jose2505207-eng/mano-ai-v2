@@ -30,7 +30,12 @@ SPA BEHAVIOR (CRITICAL for Google Flights, Airbnb, etc.):
 - If a ref from a previous step is not listed, it NO LONGER EXISTS — pick a different ref from the current list.
 - After filling one field, the NEXT field will have a DIFFERENT ref number. Do NOT reuse the previous step's ref.
 - To submit a search form, click the search/submit [BUTTON]. Do NOT use kind="search" — it does not exist.
-- SEARCH SUBMISSION: After filling origin, destination, and date fields on a travel site, try pressing Enter (kind="press_key" value="Enter") to submit. If that doesn't work, look for a button with text "Search" or "Explore" and click it.
+- SEARCH SUBMISSION: After filling fields on travel sites:
+  1. FIRST: Look at the current page — if flight results, prices, or itineraries are already visible, the task is DONE. Return kind="done" with a summary of what you see.
+  2. If no results visible, look for a button with text "Search", "Explore", or "Buscar" and click it.
+  3. If no such button exists, try press_key Enter on the last filled field.
+  4. After 2 failed attempts to submit, check if results loaded anyway (Google Flights auto-loads results after filling destination).
+- GOOGLE FLIGHTS SPECIFIC: Google Flights often auto-loads results when you fill the destination field. Look for price cards, flight cards, or "Best departing flights" text. If you see ANY flight results or prices on the page, the task is DONE — return kind="done" and summarize the results.
 - DATE PICKERS: For ANY field that asks for a date (departure date, return date, check-in, check-out, etc.), ALWAYS use kind="select_date" with ref pointing to the date input/field and value as the date in YYYY-MM-DD format. Do NOT try to fill() a date field — fill() cannot interact with calendar widgets. The select_date action will click the date field, open the calendar, and find the correct date cell by aria-label or data-iso attribute. This applies to Google Flights, Airbnb, Expedia, Booking.com, and any site with calendar date pickers.
 
 NAVIGATION RULE (CRITICAL):

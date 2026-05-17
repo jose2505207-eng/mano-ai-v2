@@ -249,6 +249,8 @@ class Orchestrator:
             # 5f. Handle terminal actions
             if decision.kind == "done":
                 self.task_run.status = "done"
+                if decision.user_visible_message:
+                    self.task_run.final_answer = decision.user_visible_message
                 self._add_step(
                     decision,
                     ActionResult(success=True, message="Task completed"),
@@ -413,6 +415,28 @@ class Orchestrator:
         parts.append("")
         parts.append("IMPORTANT: Only use refs listed above. Previous step refs are now INVALID.")
 
+        # Check if results are already visible on the page
+        # Only do this after the agent has actually filled/clicked something (step 3+)
+        has_done_form_work = (
+            self.task_run is not None
+            and len(self.task_run.steps) >= 3
+            and any(
+                s.decision.kind in ("fill", "click", "select_date", "select")
+                for s in self.task_run.steps
+            )
+        )
+        if has_done_form_work:
+            page_text_lower = snapshot.text_summary.lower() if snapshot.text_summary else ""
+            result_indicators = ["departing", "arriving", "nonstop", "1 stop", "2 stops",
+                                 "round trip", "one way", "economy", "business class", "best flights",
+                                 "best departing", "cheapest", "best price"]
+            visible_results = sum(1 for ind in result_indicators if ind in page_text_lower)
+            if visible_results >= 2:
+                parts.append("")
+                parts.append("✅ FLIGHT/SEARCH RESULTS APPEAR TO BE VISIBLE ON THIS PAGE.")
+                parts.append("If you can see prices or results in the elements above, the search is DONE.")
+                parts.append("Use action kind 'done' with a summary of the results you see.")
+
         # Add profile info for form filling
         if self._profile:
             parts.append("")
@@ -476,6 +500,16 @@ class Orchestrator:
             if fixed:
                 logger.info(f"Fixing action kind: '{data['kind']}' -> '{fixed}'")
                 data["kind"] = fixed
+
+        # Fill in defaults for commonly-omitted required fields
+        if "reason" not in data or not data["reason"]:
+            data["reason"] = data.get("user_visible_message", "")
+        if "confidence" not in data or data["confidence"] is None:
+            data["confidence"] = 0.5
+        if "risk" not in data or not data["risk"]:
+            data["risk"] = "safe"
+        if "user_visible_message" not in data or not data["user_visible_message"]:
+            data["user_visible_message"] = data.get("reason", "")
 
         try:
             return ActionDecision(**data)
